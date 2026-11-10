@@ -1,0 +1,39 @@
+name: Handasa Revenue Engine Cron
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m unittest -v
+      - run: python -m pip install bandit==1.7.10 ruff==0.8.4
+      - run: ruff check .
+      - run: bandit -r . -x ./.git
+
+  run-engine:
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run read-only analytics
+        env:
+          NETWORK_RPC_URL: ${{ secrets.NETWORK_RPC_URL }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          OBSERVED_VOLUME_USD: ${{ vars.OBSERVED_VOLUME_USD }}
+          FEE_PERCENTAGE: ${{ vars.FEE_PERCENTAGE }}
+        run: python revenue_engine.py
