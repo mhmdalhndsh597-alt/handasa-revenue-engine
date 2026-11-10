@@ -37,3 +37,22 @@ jobs:
           OBSERVED_VOLUME_USD: ${{ vars.OBSERVED_VOLUME_USD }}
           FEE_PERCENTAGE: ${{ vars.FEE_PERCENTAGE }}
         run: python revenue_engine.py
+      - name: Observe incoming USDT deposits (read-only)
+        env:
+          NETWORK_RPC_URL: ${{ secrets.NETWORK_RPC_URL }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DEPOSIT_WALLET_ADDRESS: ${{ vars.DEPOSIT_WALLET_ADDRESS }}
+          USDT_CONTRACT_ADDRESS: ${{ vars.USDT_CONTRACT_ADDRESS }}
+          USDT_DECIMALS: ${{ vars.USDT_DECIMALS }}
+          SCAN_BLOCKS: ${{ vars.SCAN_BLOCKS }}
+          EXPLORER_TX_URL: ${{ vars.EXPLORER_TX_URL }}
+          DEPOSIT_STATE_FILE: data/deposits.jsonl
+          DEPOSIT_SEEN_FILE: data/seen_deposits.txt
+        run: python deposit_monitor.py
+      - name: Upload observed deposit records
+        uses: actions/upload-artifact@v4
+        with:
+          name: observed-deposits-${{ github.run_number }}
+          path: data/
+          if-no-files-found: warn
+          retention-days: 14
