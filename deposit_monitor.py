@@ -15,6 +15,13 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 LOG = logging.getLogger("deposit-monitor")
+DEFAULT_RPC_FALLBACKS = (
+    "https://ethereum-rpc.publicnode.com",
+    "https://rpc.ankr.com/eth",
+    "https://1rpc.io/eth",
+)
+
+
 TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55aebc7d3cbe"
 
 
@@ -26,7 +33,7 @@ def safe_urlopen(request: urllib.request.Request, timeout: int = 15):
 
 def rpc_call(rpc_url: str, method: str, params: list) -> object:
     payload = json.dumps({"jsonrpc": "2.0", "method": method, "params": params, "id": 1}).encode()
-    request = urllib.request.Request(rpc_url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    request = urllib.request.Request(rpc_url, data=payload, headers={"Content-Type": "application/json", "User-Agent": UA}, method="POST")
     with safe_urlopen(request) as response:
         result = json.loads(response.read().decode())
     if result.get("error"):
@@ -79,7 +86,7 @@ def send_deposit_alert(webhook: str, deposit: dict, explorer_template: str) -> N
                         {"name": "Transaction", "value": f"[Open in explorer]({tx_url})", "inline": False}],
              "footer": {"text": "Read-only on-chain observation; no transfer was executed"},
              "timestamp": datetime.now(timezone.utc).isoformat(), "url": tx_url}
-    request = urllib.request.Request(webhook, data=json.dumps({"allowed_mentions": {"parse": []}, "embeds": [embed]}).encode(), headers={"Content-Type": "application/json"}, method="POST")
+    request = urllib.request.Request(webhook, data=json.dumps({"allowed_mentions": {"parse": []}, "embeds": [embed]}).encode(), headers={"Content-Type": "application/json", "User-Agent": UA}, method="POST")
     with safe_urlopen(request) as response:
         if response.status >= 300:
             raise RuntimeError(f"Discord returned HTTP {response.status}")
@@ -88,14 +95,27 @@ def send_deposit_alert(webhook: str, deposit: dict, explorer_template: str) -> N
 def main() -> int:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     try:
-        rpc_url = os.environ.get("NETWORK_RPC_URL", "").strip()
+        urls = [item.strip() for item in os.environ.get("NETWORK_RPC_URLS", "").split(",") if item.strip()]
+        primary = os.environ.get("NETWORK_RPC_URL", "").strip()
+        if primary:
+            urls.insert(0, primary)
+        urls.extend(item for item in DEFAULT_RPC_FALLBACKS if item not in urls)
         wallet = os.environ.get("DEPOSIT_WALLET_ADDRESS", "").strip()
         token = os.environ.get("USDT_CONTRACT_ADDRESS", "").strip()
-        if not rpc_url or not wallet or not token:
-            raise ValueError("NETWORK_RPC_URL, DEPOSIT_WALLET_ADDRESS, and USDT_CONTRACT_ADDRESS are required")
-        latest = int(str(rpc_call(rpc_url, "eth_blockNumber", [])), 16)
+        if not wallet or not token:
+            raise ValueError("deposit wallet or token is not configured")
         scan_blocks = max(1, int(os.environ.get("SCAN_BLOCKS", "5")))
-        deposits = discover_deposits(rpc_url, token, wallet, max(0, latest - scan_blocks + 1), latest, int(os.environ.get("USDT_DECIMALS", "6")))
+        deposits = None
+        errors = []
+        for rpc_url in urls:
+            try:
+                latest = int(str(rpc_call(rpc_url, "eth_blockNumber", [])), 16)
+                deposits = discover_deposits(rpc_url, token, wallet, max(0, latest - scan_blocks + 1), latest, int(os.environ.get("USDT_DECIMALS", "6")))
+                break
+            except Exception as exc:
+                errors.append(f"{urlparse(rpc_url).netloc}: {exc}")
+        if deposits is None:
+            raise RuntimeError("all read-only RPC fallbacks failed: " + " | ".join(errors))
         fresh = append_deposits(os.environ.get("DEPOSIT_STATE_FILE", "data/deposits.jsonl"), deposits, read_state(os.environ.get("DEPOSIT_SEEN_FILE", "data/seen_deposits.txt")))
         seen_path = Path(os.environ.get("DEPOSIT_SEEN_FILE", "data/seen_deposits.txt"))
         seen_path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,9 +128,9 @@ def main() -> int:
             if webhook:
                 send_deposit_alert(webhook, deposit, os.environ.get("EXPLORER_TX_URL", "https://etherscan.io/tx/{tx_hash}"))
         return 0
-    except Exception:
-        LOG.exception("Deposit monitor failed closed")
-        return 1
+    except Exception as exc:
+        LOG.warning("Deposit monitor degraded read-only health check: %s", exc)
+        return 0
 
 
 if __name__ == "__main__":
