@@ -14,6 +14,8 @@ from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlparse
 
+UA = "Mozilla/5.0 (compatible; HandasaReadOnlyMonitor/1.0)"
+
 LOG = logging.getLogger("deposit-monitor")
 DEFAULT_RPC_FALLBACKS = (
     "https://ethereum-rpc.publicnode.com",
