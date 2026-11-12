@@ -33,6 +33,7 @@ jobs:
       - name: Run read-only analytics
         env:
           NETWORK_RPC_URL: ${{ secrets.NETWORK_RPC_URL }}
+          NETWORK_RPC_URLS: ${{ secrets.NETWORK_RPC_URLS }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           OBSERVED_VOLUME_USD: ${{ vars.OBSERVED_VOLUME_USD }}
           FEE_PERCENTAGE: ${{ vars.FEE_PERCENTAGE }}
@@ -40,6 +41,7 @@ jobs:
       - name: Observe incoming USDT deposits (read-only)
         env:
           NETWORK_RPC_URL: ${{ secrets.NETWORK_RPC_URL }}
+          NETWORK_RPC_URLS: ${{ secrets.NETWORK_RPC_URLS }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           DEPOSIT_WALLET_ADDRESS: ${{ vars.DEPOSIT_WALLET_ADDRESS }}
           USDT_CONTRACT_ADDRESS: ${{ vars.USDT_CONTRACT_ADDRESS }}
