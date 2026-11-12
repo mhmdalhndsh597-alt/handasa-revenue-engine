@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlparse
 
+UA = "Mozilla/5.0 (compatible; HandasaReadOnlyMonitor/1.0)"
+
 LOG = logging.getLogger("handasa-revenue-engine")
 DEFAULT_RPC_FALLBACKS = (
     "https://ethereum-rpc.publicnode.com",
